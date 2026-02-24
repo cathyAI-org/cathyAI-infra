@@ -23,7 +23,9 @@ class TestPromptComposer:
         }
 
     def test_health(self):
-        from prompt_composer.app import app
+        import sys
+        sys.path.insert(0, 'prompt-composer')
+        from app import app
         client = TestClient(app)
         
         response = client.get("/health")
@@ -32,9 +34,11 @@ class TestPromptComposer:
 
     @pytest.mark.asyncio
     async def test_compose_chat(self, mock_char_api):
-        from prompt_composer.app import app
+        import sys
+        sys.path.insert(0, 'prompt-composer')
+        from app import app
         
-        with patch("prompt_composer.app.fetch_character_private") as mock_fetch:
+        with patch("app.fetch_character_private") as mock_fetch:
             mock_fetch.return_value = mock_char_api
             
             client = TestClient(app)
@@ -59,9 +63,11 @@ class TestPromptComposer:
 
     @pytest.mark.asyncio
     async def test_compose_with_memory(self, mock_char_api):
-        from prompt_composer.app import app
+        import sys
+        sys.path.insert(0, 'prompt-composer')
+        from app import app
         
-        with patch("prompt_composer.app.fetch_character_private") as mock_fetch:
+        with patch("app.fetch_character_private") as mock_fetch:
             mock_fetch.return_value = mock_char_api
             
             client = TestClient(app)

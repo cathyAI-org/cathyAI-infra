@@ -16,7 +16,9 @@ class TestAIOrchestrator:
         os.environ["MAX_TOTAL_QUEUED"] = "50"
 
     def test_health(self):
-        from ai_orchestrator.app import app
+        import sys
+        sys.path.insert(0, 'ai-orchestrator')
+        from app import app
         client = TestClient(app)
         
         response = client.get("/health")
@@ -24,7 +26,9 @@ class TestAIOrchestrator:
         assert response.json()["ok"] is True
 
     def test_submit_job(self):
-        from ai_orchestrator.app import app
+        import sys
+        sys.path.insert(0, 'ai-orchestrator')
+        from app import app
         client = TestClient(app)
         
         response = client.post(
@@ -45,7 +49,9 @@ class TestAIOrchestrator:
         assert data["status"] == "queued"
 
     def test_get_job(self):
-        from ai_orchestrator.app import app
+        import sys
+        sys.path.insert(0, 'ai-orchestrator')
+        from app import app
         client = TestClient(app)
         
         submit_response = client.post(
@@ -69,7 +75,9 @@ class TestAIOrchestrator:
         assert data["status"] == "queued"
 
     def test_coalescing(self):
-        from ai_orchestrator.app import app
+        import sys
+        sys.path.insert(0, 'ai-orchestrator')
+        from app import app
         client = TestClient(app)
         
         response1 = client.post(
@@ -106,7 +114,9 @@ class TestAIOrchestrator:
     def test_queue_limits(self):
         os.environ["MAX_QUEUE_PER_SESSION"] = "2"
         
-        from ai_orchestrator.app import app
+        import sys
+        sys.path.insert(0, 'ai-orchestrator')
+        from app import app
         client = TestClient(app)
         
         for i in range(2):
