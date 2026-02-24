@@ -120,9 +120,12 @@ class TestAIOrchestrator:
         assert data2["coalesced_into"] == job_id_1
 
     def test_queue_limits(self):
+        import sys
+        if 'app' in sys.modules:
+            del sys.modules['app']
+        
         os.environ["MAX_QUEUE_PER_SESSION"] = "2"
         
-        import sys
         sys.path.insert(0, 'ai-orchestrator')
         from app import app, on_startup
         import asyncio
