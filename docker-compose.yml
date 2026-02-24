@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  prompt-composer:
+    build: ./prompt-composer
+    container_name: cathyai-prompt-composer
+    env_file:
+      - ./prompt-composer/.env
+    ports:
+      - "8110:8110"
+    restart: unless-stopped
+
+  ai-orchestrator:
+    build: ./ai-orchestrator
+    container_name: cathyai-ai-orchestrator
+    env_file:
+      - ./ai-orchestrator/.env
+    depends_on:
+      - prompt-composer
+    ports:
+      - "8120:8120"
+    volumes:
+      - ./state/orchestrator:/state
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

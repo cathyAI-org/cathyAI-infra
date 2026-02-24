@@ -1,0 +1,13 @@
+# (feat|fix|docs|style|refactor|test|chore) In brackets
+[Type]: Title
+
+Description:
+# List of changes, one short description per change
+#   - Change 1
+#   - Change 2
+#   - Change 3
+#   - Change 4
+
+Additional info:
+# If there is a need to exoand on any change, it
+# should be done here.

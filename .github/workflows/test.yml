@@ -1,0 +1,40 @@
+name: Test and Merge
+on:
+  push:
+    branches: [dmz]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt-get update && apt-get install -y python3-pip python3-venv
+      - run: python3 -m venv venv
+      - run: |
+          . venv/bin/activate
+          pip install -r requirements.txt
+      - run: |
+          . venv/bin/activate
+          pytest tests/ -v
+  merge:
+    needs: test
+    runs-on: ubuntu-latest
+    if: success()
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git checkout main
+          git pull origin main
+          git merge dmz --no-edit || (
+            git checkout --theirs .env.template && 
+            git add .env.template && 
+            git commit -m "Merge dmz: resolve .env.template conflict"
+          )
+          git push origin main
