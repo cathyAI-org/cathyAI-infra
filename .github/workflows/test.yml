@@ -12,7 +12,9 @@ jobs:
       - run: python3 -m venv venv
       - run: |
           . venv/bin/activate
-          pip install -r requirements.txt
+          pip install -r prompt-composer/requirements.txt
+          pip install -r ai-orchestrator/requirements.txt
+          pip install -r tests/requirements.txt
       - run: |
           . venv/bin/activate
           pytest tests/ -v
