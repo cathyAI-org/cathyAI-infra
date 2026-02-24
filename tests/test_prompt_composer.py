@@ -35,13 +35,15 @@ class TestPromptComposer:
     @pytest.mark.asyncio
     async def test_compose_chat(self, mock_char_api):
         import sys
+        if 'app' in sys.modules:
+            del sys.modules['app']
         sys.path.insert(0, 'prompt-composer')
-        from app import app
+        import app as composer_app
         
-        with patch("app.fetch_character_private") as mock_fetch:
+        with patch.object(composer_app, "fetch_character_private") as mock_fetch:
             mock_fetch.return_value = mock_char_api
             
-            client = TestClient(app)
+            client = TestClient(composer_app.app)
             response = client.post(
                 "/v1/prompt/compose",
                 json={
@@ -64,13 +66,15 @@ class TestPromptComposer:
     @pytest.mark.asyncio
     async def test_compose_with_memory(self, mock_char_api):
         import sys
+        if 'app' in sys.modules:
+            del sys.modules['app']
         sys.path.insert(0, 'prompt-composer')
-        from app import app
+        import app as composer_app
         
-        with patch("app.fetch_character_private") as mock_fetch:
+        with patch.object(composer_app, "fetch_character_private") as mock_fetch:
             mock_fetch.return_value = mock_char_api
             
-            client = TestClient(app)
+            client = TestClient(composer_app.app)
             response = client.post(
                 "/v1/prompt/compose",
                 json={

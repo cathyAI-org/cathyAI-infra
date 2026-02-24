@@ -18,7 +18,9 @@ class TestAIOrchestrator:
     def test_health(self):
         import sys
         sys.path.insert(0, 'ai-orchestrator')
-        from app import app
+        from app import app, on_startup
+        import asyncio
+        asyncio.run(on_startup())
         client = TestClient(app)
         
         response = client.get("/health")
@@ -28,7 +30,9 @@ class TestAIOrchestrator:
     def test_submit_job(self):
         import sys
         sys.path.insert(0, 'ai-orchestrator')
-        from app import app
+        from app import app, on_startup
+        import asyncio
+        asyncio.run(on_startup())
         client = TestClient(app)
         
         response = client.post(
@@ -51,7 +55,9 @@ class TestAIOrchestrator:
     def test_get_job(self):
         import sys
         sys.path.insert(0, 'ai-orchestrator')
-        from app import app
+        from app import app, on_startup
+        import asyncio
+        asyncio.run(on_startup())
         client = TestClient(app)
         
         submit_response = client.post(
@@ -77,7 +83,9 @@ class TestAIOrchestrator:
     def test_coalescing(self):
         import sys
         sys.path.insert(0, 'ai-orchestrator')
-        from app import app
+        from app import app, on_startup
+        import asyncio
+        asyncio.run(on_startup())
         client = TestClient(app)
         
         response1 = client.post(
@@ -116,7 +124,9 @@ class TestAIOrchestrator:
         
         import sys
         sys.path.insert(0, 'ai-orchestrator')
-        from app import app
+        from app import app, on_startup
+        import asyncio
+        asyncio.run(on_startup())
         client = TestClient(app)
         
         for i in range(2):
