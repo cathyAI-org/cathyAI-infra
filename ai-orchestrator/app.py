@@ -8,11 +8,13 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 PROMPT_COMPOSER_URL = os.getenv("PROMPT_COMPOSER_URL", "").rstrip("/")
 OLLAMA_API_CHAT_URL = os.getenv("OLLAMA_API_CHAT_URL", "").rstrip("/")
 OLLAMA_API_CHAT_KEY = os.getenv("OLLAMA_API_CHAT_KEY", "")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemma2:2b")
+COMPAT_TIMEOUT_S = int(os.getenv("COMPAT_TIMEOUT_S", "300"))
 STATE_DB = os.getenv("STATE_DB", "/state/orchestrator.sqlite")
 GLOBAL_WORKERS = int(os.getenv("GLOBAL_WORKERS", "1"))
 MAX_QUEUE_PER_SESSION = int(os.getenv("MAX_QUEUE_PER_SESSION", "3"))
@@ -71,6 +73,7 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 
 class SubmitJobRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     source: str = Field(pattern="^(matrix|webui|chainlit|system)$")
     session_id: str
     task_type: str = "chat"
@@ -89,6 +92,17 @@ class SubmitJobResponse(BaseModel):
     job_id: str
     status: str
     coalesced_into: Optional[str] = None
+
+
+class CompatChatRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    model: Optional[str] = None
+    messages: List[Dict[str, Any]]
+    stream: bool = False
+    session_id: Optional[str] = None
+    character_id: Optional[str] = None
+    platform: str = "webui"
+    source: str = "webui"
 
 
 def is_coalescible(req: SubmitJobRequest) -> bool:
@@ -205,6 +219,19 @@ def pick_next_queued_job(conn: sqlite3.Connection) -> Optional[sqlite3.Row]:
     ).fetchone()
 
 
+def _normalize_messages(msgs: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    out = []
+    for m in msgs:
+        role = str(m.get("role") or "").strip()
+        content = m.get("content")
+        if isinstance(content, list):
+            content = " ".join(str(x.get("text", "")) for x in content if isinstance(x, dict))
+        content = str(content or "")
+        if role and content:
+            out.append({"role": role, "content": content})
+    return out
+
+
 async def call_prompt_composer(job: sqlite3.Row) -> Dict[str, Any]:
     req = json.loads(job["request_json"])
     pending_messages = json.loads(job["pending_messages_json"] or "[]")
@@ -212,14 +239,15 @@ async def call_prompt_composer(job: sqlite3.Row) -> Dict[str, Any]:
     messages = req.get("messages") or []
 
     if job["task_type"] == "chat":
-        user_parts = [
-            m.get("content", "").strip()
-            for m in pending_messages
-            if m.get("role") == "user" and str(m.get("content", "")).strip()
-        ]
-        if user_parts:
-            combined_user_message = "\n".join(user_parts)
-            messages = [{"role": "user", "content": combined_user_message}]
+        if not messages:
+            user_parts = [
+                m.get("content", "").strip()
+                for m in pending_messages
+                if m.get("role") == "user" and str(m.get("content", "")).strip()
+            ]
+            if user_parts:
+                combined_user_message = "\n".join(user_parts)
+                messages = [{"role": "user", "content": combined_user_message}]
 
     payload = {
         "character_id": job["character_id"],
@@ -236,19 +264,23 @@ async def call_prompt_composer(job: sqlite3.Row) -> Dict[str, Any]:
 
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         r = await client.post(f"{PROMPT_COMPOSER_URL}/v1/prompt/compose", json=payload)
-        r.raise_for_status()
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(f"{e} :: {e.response.text[:500]}")
         return r.json()
 
 
-async def call_OLLAMA_API(job: sqlite3.Row, prompt_bundle: Dict[str, Any]) -> str:
+async def call_ollama_api(job: sqlite3.Row, prompt_bundle: Dict[str, Any]) -> str:
     if not OLLAMA_API_CHAT_URL:
         raise RuntimeError("OLLAMA_API_CHAT_URL not configured")
 
     req = json.loads(job["request_json"])
     task_inputs = req.get("task_inputs") or {}
+    model = task_inputs.get("model") or DEFAULT_MODEL
 
     payload = {
-        "model": task_inputs.get("model"),
+        "model": model,
         "messages": [{"role": "system", "content": prompt_bundle["system_text"]}] + prompt_bundle.get("messages", []),
         "stream": False,
     }
@@ -259,18 +291,37 @@ async def call_OLLAMA_API(job: sqlite3.Row, prompt_bundle: Dict[str, Any]) -> st
 
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         r = await client.post(OLLAMA_API_CHAT_URL, json=payload, headers=headers)
-        r.raise_for_status()
-        data = r.json()
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(f"{e} :: {e.response.text[:500]}")
+        try:
+            data = r.json()
+        except Exception:
+            # Preserve raw body for debugging
+            body = r.text
+            return body[:2000]  # cap to avoid huge logs
 
+        result = ""
         if isinstance(data, dict):
             if isinstance(data.get("reply"), str):
-                return data["reply"]
-            if isinstance(data.get("message"), dict):
-                return str(data["message"].get("content") or "")
-            if isinstance(data.get("response"), str):
-                return data["response"]
+                result = data["reply"]
+            elif isinstance(data.get("message"), dict):
+                result = str(data["message"].get("content") or "")
+            elif isinstance(data.get("response"), str):
+                result = data["response"]
+            else:
+                result = json.dumps(data, ensure_ascii=False)
+        else:
+            result = json.dumps(data, ensure_ascii=False)
 
-        return json.dumps(data, ensure_ascii=False)
+        if result.startswith('"') and result.endswith('"') and len(result) > 1:
+            try:
+                result = json.loads(result)
+            except:
+                pass
+
+        return result
 
 
 async def process_one_job(job_id: str):
@@ -295,7 +346,7 @@ async def process_one_job(job_id: str):
 
         try:
             prompt_bundle = await call_prompt_composer(job)
-            result_text = await call_OLLAMA_API(job, prompt_bundle)
+            result_text = await call_ollama_api(job, prompt_bundle)
 
             CONN.execute(
                 """
@@ -331,6 +382,18 @@ async def worker_loop(name: str):
             continue
 
         await process_one_job(str(job["job_id"]))
+
+
+async def wait_for_job_done(job_id: str, timeout_s: int = 300) -> sqlite3.Row:
+    global CONN
+    assert CONN is not None
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        row = CONN.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+        if row and row["status"] in ("done", "error", "cancelled"):
+            return row
+        await asyncio.sleep(0.25)
+    raise HTTPException(status_code=504, detail="Job timed out")
 
 
 @app.on_event("startup")
@@ -399,3 +462,43 @@ def get_job(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
 
     return dict(row)
+
+
+@app.post("/v1/compat/chat")
+async def compat_chat(req: CompatChatRequest):
+    global CONN
+    assert CONN is not None
+
+    session_id = req.session_id or "chainlit:compat"
+    character_id = req.character_id or "catherine"
+
+    norm = _normalize_messages(req.messages)
+    filtered_messages = [m for m in norm if m["role"] != "system"]
+
+    user_message = ""
+    for m in reversed(filtered_messages):
+        if m["role"] == "user":
+            user_message = m["content"]
+            break
+
+    job_req = SubmitJobRequest(
+        source=req.source,
+        session_id=session_id,
+        task_type="chat",
+        character_id=character_id,
+        platform=req.platform,
+        user_message=user_message or "(no user message)",
+        coalesce=False,
+        priority=100,
+        task_inputs={"model": req.model} if req.model else {},
+        messages=filtered_messages,
+    )
+
+    job_id = insert_job(CONN, job_req)
+    queue_wakeup.set()
+
+    final = await wait_for_job_done(job_id, timeout_s=COMPAT_TIMEOUT_S)
+    if final["status"] != "done":
+        raise HTTPException(status_code=502, detail=final["error_text"] or "Upstream error")
+
+    return {"reply": final["result_text"], "job_id": job_id}
