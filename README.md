@@ -4,20 +4,21 @@ AI-side orchestration services for cathyAI, running on the ASUS AI node.
 
 ## Services
 
+- **ollama-api** (port 8100): FastAPI proxy for AI backends (Ollama, NPU-SVC)
 - **prompt-composer** (port 8110): Builds unified prompts from character + platform + task + memory/identity context
 - **ai-orchestrator** (port 8120): Queue + coalescing + worker scheduler for AI jobs
 
 ## External Dependencies
 
-- Character API (DIY node: 192.168.1.59:8090)
-- Identity API (DIY node: 192.168.1.59:8092)
-- cathyAI-API (ASUS node, local)
-- NPU-SVC / Ollama (ASUS node, through cathyAI-API)
+- Character API (192.168.1.59:8090)
+- Identity API  (192.168.1.59:8092)
+- Ollama        (127.0.0.1:11434)
 
 ## Setup
 
 ```bash
 # Copy and configure environment files
+cp ollama-api/.env.example ollama-api/.env
 cp prompt-composer/.env.example prompt-composer/.env
 cp ai-orchestrator/.env.example ai-orchestrator/.env
 
@@ -30,11 +31,29 @@ docker-compose up -d --build
 ## Health Checks
 
 ```bash
+curl http://127.0.0.1:8100/health
 curl http://127.0.0.1:8110/health
 curl http://127.0.0.1:8120/health
 ```
 
 ## API Usage
+
+### Ollama API
+
+```bash
+# List models
+curl http://127.0.0.1:8100/models
+
+# Generate text (streaming)
+curl -N http://127.0.0.1:8100/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"model":"llama2","prompt":"Hello"}'
+
+# Chat (non-streaming)
+curl http://127.0.0.1:8100/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"model":"llama2","messages":[{"role":"user","content":"Hi"}],"stream":false}'
+```
 
 ### Prompt Composer
 

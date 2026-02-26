@@ -11,8 +11,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 PROMPT_COMPOSER_URL = os.getenv("PROMPT_COMPOSER_URL", "").rstrip("/")
-CATHY_API_URL = os.getenv("CATHY_API_URL", "").rstrip("/")
-CATHY_API_KEY = os.getenv("CATHY_API_KEY", "")
+OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "").rstrip("/")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 STATE_DB = os.getenv("STATE_DB", "/state/orchestrator.sqlite")
 GLOBAL_WORKERS = int(os.getenv("GLOBAL_WORKERS", "1"))
 MAX_QUEUE_PER_SESSION = int(os.getenv("MAX_QUEUE_PER_SESSION", "3"))
@@ -240,9 +240,9 @@ async def call_prompt_composer(job: sqlite3.Row) -> Dict[str, Any]:
         return r.json()
 
 
-async def call_cathy_api(job: sqlite3.Row, prompt_bundle: Dict[str, Any]) -> str:
-    if not CATHY_API_URL:
-        raise RuntimeError("CATHY_API_URL not configured")
+async def call_OLLAMA_API(job: sqlite3.Row, prompt_bundle: Dict[str, Any]) -> str:
+    if not OLLAMA_API_URL:
+        raise RuntimeError("OLLAMA_API_URL not configured")
 
     req = json.loads(job["request_json"])
     task_inputs = req.get("task_inputs") or {}
@@ -254,11 +254,11 @@ async def call_cathy_api(job: sqlite3.Row, prompt_bundle: Dict[str, Any]) -> str
     }
 
     headers = {"Content-Type": "application/json"}
-    if CATHY_API_KEY:
-        headers["Authorization"] = f"Bearer {CATHY_API_KEY}"
+    if OLLAMA_API_KEY:
+        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
 
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-        r = await client.post(CATHY_API_URL, json=payload, headers=headers)
+        r = await client.post(OLLAMA_API_URL, json=payload, headers=headers)
         r.raise_for_status()
         data = r.json()
 
@@ -295,7 +295,7 @@ async def process_one_job(job_id: str):
 
         try:
             prompt_bundle = await call_prompt_composer(job)
-            result_text = await call_cathy_api(job, prompt_bundle)
+            result_text = await call_OLLAMA_API(job, prompt_bundle)
 
             CONN.execute(
                 """
@@ -351,7 +351,7 @@ def health():
     return {
         "ok": True,
         "prompt_composer_url": PROMPT_COMPOSER_URL,
-        "cathy_api_url": CATHY_API_URL,
+        "OLLAMA_API_url": OLLAMA_API_URL,
         "global_workers": GLOBAL_WORKERS,
     }
 
