@@ -12,6 +12,7 @@ jobs:
       - run: python3 -m venv venv
       - run: |
           . venv/bin/activate
+          pip install -r ollama-api/requirements.txt
           pip install -r prompt-composer/requirements.txt
           pip install -r ai-orchestrator/requirements.txt
           pip install -r tests/requirements.txt
