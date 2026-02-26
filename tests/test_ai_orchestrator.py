@@ -13,7 +13,7 @@ class TestAIOrchestrator:
             del sys.modules['app']
         
         os.environ["PROMPT_COMPOSER_URL"] = "http://test:8110"
-        os.environ["OLLAMA_API_URL"] = "http://test:8000"
+        os.environ["OLLAMA_API_CHAT_URL"] = "http://test:8000"
         os.environ["STATE_DB"] = tempfile.mktemp(suffix=".sqlite")
         os.environ["GLOBAL_WORKERS"] = "1"
         os.environ["MAX_QUEUE_PER_SESSION"] = "3"
